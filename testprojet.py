@@ -2,7 +2,8 @@ from Bras import Bras as b
 
 bras = b()
 
-bras.testcoordonnees()
+#bras.test_as5600()
+#bras.testcoordonnees()
 
 # xmin=0 xmax=35
 # ymin=11 ymax=48

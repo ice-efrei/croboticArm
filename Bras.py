@@ -22,11 +22,12 @@ class Bras():
 		GPIO.output(self.PIN_AIMANT, GPIO.HIGH)
 		"""
 		print(">>> Initialisation Moteurs")
-		self.moteur2=MoteurAngle(24,25,1,333)
-		self.moteur1=MoteurAngle(22,23,0,172)
-		self.moteurAxe=MoteurAxe(17,27)
-		self.moteurAxe.zero()
-		self.coordonnees(0,12,-7)
+		
+		self.moteurAxe=MoteurAxe(27,17)
+		self.moteur1=MoteurAngle(23,22,1,266)
+		self.moteur2=MoteurAngle(24,25,0,333)
+		
+		# self.coordonnees(0,12,-7)
 	
 	def test_as5600(self):
 		print("--------------------------Test AS5600--------------------------")
@@ -54,7 +55,7 @@ class Bras():
 	def testMoteurAngle(self):
 		print("--------------------------Test MOTEUR ANGLE--------------------------")
 		for i in range(0,6400):
-			self.moteur1.one_step(1,0.0005)
+			self.moteur1.one_step(-1,0.0005)
 			
 			
 	
@@ -73,6 +74,9 @@ class Bras():
 		longueur_coude = 25
 		#Calcul de l'angle du moteur 1
 		distance = math.sqrt(z**2 + y**2)
+		if distance == 0:
+                        print("⚠️ Erreur : distance = 0 → coordonnées invalides (y=z=0).")
+                        return
 		a1 = math.atan2(z, y)
 		a2 = math.acos((longueur_bras**2 + distance**2 - longueur_coude**2)/(2*longueur_bras*distance))
 		a = a1 + a2

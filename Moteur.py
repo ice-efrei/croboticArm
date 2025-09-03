@@ -31,32 +31,48 @@ class Moteur():
         self.nb_pas=0
 
     def one_step(self,direction, vitesse):
-        if direction == 1:
-            GPIO.output(self.DIR, GPIO.HIGH)
-        else:
-            GPIO.output(self.DIR, GPIO.LOW)
-        GPIO.output(self.STEP, GPIO.HIGH)
-        sleep(vitesse)
-        GPIO.output(self.STEP, GPIO.LOW)
-        sleep(vitesse)
+        try:
+            # si c'est un moteur angle lire la valeur du capteur
+            if (self.DIR== 24 or self.DIR== 22):
+                angle = self.read_true_angle()
+                print(f"DEBUG: angle lu sur le capteur AS5600 {self.DIR}: {angle}")
+            print(f"DEBUG: one_step  direction={direction}, vitesse={vitesse} sur pin STEP={self.STEP}, DIR={self.DIR}")
+            # S'assurer que ENABLE est activé (LOW active les moteurs dans la plupart des pilotes)
+            
+            if direction == 1:
+                GPIO.output(self.DIR, GPIO.HIGH)
+                print(f"HIGH")
+            else:
+                GPIO.output(self.DIR, GPIO.LOW)
+                print(f"LOW")          
+            GPIO.output(self.STEP, GPIO.HIGH)
+            sleep(vitesse)
+            GPIO.output(self.STEP, GPIO.LOW)
+            sleep(vitesse)
+            
+        except Exception as e:
+            print(f"ERREUR dans one_step: {e}")
 
     
                 
 class MoteurAxe(Moteur):
-    FC=5 # fin de course
+    FC=6 # fin de course
     def __init__(self,STEP,DIR):
+        print("init moteur axe")
         super().__init__(STEP,DIR)
         GPIO.setup(self.FC, GPIO.IN)
+        self.zero()
     
     def zero(self):
+        print(GPIO.input(self.FC))
         while(GPIO.input(self.FC)==0):
-            self.one_step(1,self.VITESSE_AXE)
+            self.one_step(0,self.VITESSE_AXE)
         while(GPIO.input(self.FC)==1):
-            self.one_step(0,self.VITESSE_AXE*4)
+            self.one_step(1,self.VITESSE_AXE*4)
         for i in range(300):
-            self.one_step(0,self.VITESSE_AXE*4)
+            self.one_step(1,self.VITESSE_AXE*4)
         while(GPIO.input(self.FC)==0):
-            self.one_step(1,self.VITESSE_AXE*6)
+            self.one_step(0,self.VITESSE_AXE*6)
         self.x=0
         print("zero")
         
@@ -106,7 +122,16 @@ class MoteurAngle(Moteur):
         
 
     def zero(self, diff):
-        while self.read_raw_angle()!=int(diff*4096/360):
+        max_attempts = 10
+        attempts = 0
+        while True:
+            raw_angle = self.read_raw_angle()
+            if raw_angle == -1:
+                print(f"Abandon de la calibration : impossible de lire l'AS5600 sur le bus {self.numBus}.")
+                break
+            if raw_angle == int(diff*4096/360):
+                break
+            print(raw_angle)
             step_per_rev = 6400  # Nombre de pas par tour (dépend du moteur)
             gear_ratio = 1
             current_angle = self.read_true_angle()
@@ -115,6 +140,10 @@ class MoteurAngle(Moteur):
             steps = int(abs(error) * (step_per_rev / 360) * gear_ratio)
             for i in range(steps):
                 self.one_step(direction, self.VITESSE_ANGLE*3)
+            attempts += 1
+            if attempts >= max_attempts:
+                print(f"Calibration interrompue après {max_attempts} tentatives.")
+                break
         self.angle = 0
         self.x = 0
     
@@ -164,9 +193,17 @@ class MoteurAngle(Moteur):
     def read_raw_angle(self):
         """
         Lit l'angle brut (0 à 4096) du capteur AS5600.
+        Gestion d'erreur I2C : affiche un message si la lecture échoue.
         """
-        read_bytes = self.bus.read_i2c_block_data(self.sensor_AS5600, 0x0C, 2)
-        return (read_bytes[0] << 8) | read_bytes[1]
+        for attempt in range(3):
+            try:
+                read_bytes = self.bus.read_i2c_block_data(self.sensor_AS5600, 0x0C, 2)
+                return (read_bytes[0] << 8) | read_bytes[1]
+            except OSError as e:
+                print(f"Erreur I2C lors de la lecture de l'angle brut (tentative {attempt+1}/3) : {e}")
+                sleep(0.1)
+        print("Echec de lecture I2C sur le capteur AS5600 (bus {}), vérifiez le câblage ou l'alimentation.".format(self.numBus))
+        return -1
         
     def read_true_angle(self):
         raw_angle = self.read_raw_angle()
@@ -187,4 +224,4 @@ class MoteurAngle(Moteur):
         angle_deg = raw_angle * 360.0 / 4096
 
         print("Bus {:1d} : RawA: {:5d} | Magnitude: {:5d} | Angle: {:7.2f}°".format(moteur,raw_angle, magnitude, angle_deg))
-           
+
